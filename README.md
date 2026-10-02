@@ -251,14 +251,3 @@ Cannot choose from an empty sequence (yt-dlp-proxy)	Бесплатные про�
 Error 1033 (Cloudflare)	Провайдер режет туннель — переключись на Pinggy
 📄 Лицензия
 MIT. Используй как хочешь. Автор не несёт ответственности за нарушение авторских прав третьих лиц.
-
-🔗 Ссылки
-ttdl на npm
-
-yt-dlp на GitHub
-
-GoodbyeDPI
-
-GoodbyeDPI-Linux
-
-ffmpeg
