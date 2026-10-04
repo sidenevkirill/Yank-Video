@@ -12,13 +12,30 @@ const YT_DLP_PATH = path.join(__dirname, "yt-dlp.exe");
 app.use(express.static(path.join(__dirname, "public")));
 
 // ============================================
-// /api — инфо о видео (TikTok)
+// /api — инфо о видео (TikTok) или VK
 // ============================================
 app.get("/api", async (req, res) => {
     const url = req.query.url;
     if (!url) return res.status(400).json({ error: "no url" });
 
     console.log("API запрос:", url);
+
+    // 👇 Если это VK — обрабатываем через yt-dlp, а не через ttdl
+    if (url.includes("vk.com/video") || url.includes("vkvideo.ru/video")) {
+        console.log("VK-ссылка в /api, получаю инфо через yt-dlp...");
+        const vkInfo = await getVkVideoInfo(url);
+        if (vkInfo) {
+            return res.json({
+                video: null,
+                title: vkInfo.title,
+                author: vkInfo.author,
+                id: vkInfo.id,
+                cover: vkInfo.thumbnail,
+                platform: "vk",
+            });
+        }
+        return res.status(500).json({ error: "Не удалось получить инфо о VK-видео" });
+    }
 
     try {
         const v = await download(url);
@@ -57,7 +74,7 @@ app.get("/api", async (req, res) => {
 });
 
 // ============================================
-// /search — TikTok или YouTube
+// /search — TikTok, YouTube или VK
 // ============================================
 app.get("/search", async (req, res) => {
     const query = (req.query.q || "").trim();
@@ -67,6 +84,16 @@ app.get("/search", async (req, res) => {
 
     console.log(`Search запрос: "${query}" (platform: ${platform})`);
 
+    // 👇 Если это прямая ссылка на VK-видео — возвращаем инфо о нём
+    if (query.includes("vk.com/video") || query.includes("vkvideo.ru/video")) {
+        console.log("Распознана VK-ссылка, получаю инфо...");
+        const vkInfo = await getVkVideoInfo(query);
+        if (vkInfo) {
+            return res.json({ results: [vkInfo], platform: "vk" });
+        }
+        return res.status(500).json({ error: "Не удалось получить инфо о VK-видео" });
+    }
+
     try {
         let results;
         if (platform === "youtube") {
@@ -74,7 +101,6 @@ app.get("/search", async (req, res) => {
         } else if (platform === "tiktok") {
             results = await searchTikTok(query);
         } else {
-            // 👇 platform=all — оба источника параллельно
             const [tt, yt] = await Promise.all([
                 searchTikTok(query).catch(() => []),
                 searchYoutube(query).catch(() => []),
@@ -89,17 +115,54 @@ app.get("/search", async (req, res) => {
 });
 
 // ============================================
+// Получить инфо о VK-видео через yt-dlp
+// ============================================
+function getVkVideoInfo(url) {
+    return new Promise((resolve) => {
+        const normalizedUrl = url
+            .replace("vk.com/video", "vkvideo.ru/video")
+            .replace("m.vk.com/video", "vkvideo.ru/video");
+
+        execFile(YT_DLP_PATH, [
+            normalizedUrl,
+            "--dump-json",
+            "--no-warnings",
+            "--skip-download",
+            "--no-playlist",
+        ], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+            if (err) {
+                console.error("VK info error:", err.message);
+                return resolve(null);
+            }
+            try {
+                const j = JSON.parse(stdout.trim());
+                resolve({
+                    id: j.id,
+                    title: j.title || "VK видео",
+                    url: url,
+                    thumbnail: j.thumbnail || null,
+                    author: j.uploader || j.channel || "VK",
+                    duration: j.duration,
+                    platform: "vk",
+                });
+            } catch (e) {
+                console.error("VK JSON parse error:", e.message);
+                resolve(null);
+            }
+        });
+    });
+}
+
+// ============================================
 // Поиск TikTok (через ytsearch, фильтр tiktok.com)
 // ============================================
 async function searchTikTok(query) {
     const results = await searchWithYtDlp(`ytsearch15:${query} tiktok`, "tiktok");
 
-    // Фильтруем: только реальные TikTok-ссылки
     const tiktokOnly = results.filter(r =>
         r.url && r.url.includes("tiktok.com")
     );
 
-    // Если TikTok-ссылок нет — возвращаем всё, что есть, с правильной платформой
     let finalResults;
     if (tiktokOnly.length > 0) {
         finalResults = tiktokOnly;
@@ -110,7 +173,6 @@ async function searchTikTok(query) {
         }));
     }
 
-    // Дополняем thumbnail через oEmbed
     for (const r of finalResults) {
         if (!r.thumbnail) {
             try {
@@ -135,12 +197,11 @@ async function searchTikTok(query) {
 }
 
 // ============================================
-// Поиск YouTube (одна функция!)
+// Поиск YouTube
 // ============================================
 async function searchYoutube(query) {
     const results = await searchWithYtDlp(`ytsearch15:${query}`, "youtube");
 
-    // 👇 Дополняем thumbnail через oEmbed, если yt-dlp не дал
     for (const r of results) {
         if (!r.thumbnail && r.url) {
             try {
@@ -194,7 +255,6 @@ function searchWithYtDlp(searchQuery, platform) {
 
                     if (!isVideo) return null;
 
-                    // Реальная платформа по URL
                     const realPlatform = url.includes("youtube.com") || url.includes("youtu.be")
                         ? "youtube"
                         : url.includes("tiktok.com")
@@ -203,7 +263,6 @@ function searchWithYtDlp(searchQuery, platform) {
 
                     const isYouTube = realPlatform === "youtube";
 
-                    // 👇 YouTube thumbnail: строим сами, если yt-dlp не дал
                     const thumbnail = j.thumbnail
                         || (isYouTube ? `https://i.ytimg.com/vi/${j.id}/hqdefault.jpg` : null);
 
@@ -263,8 +322,7 @@ function sanitizeFileName(name) {
 }
 
 // ============================================
-// /download — TikTok (ttdl) или YouTube (yt-dlp)
-// Параметры: url, format=mp4|mp3
+// /download — TikTok (ttdl), YouTube или VK (yt-dlp)
 // ============================================
 app.get("/download", async (req, res) => {
     const url = req.query.url;
@@ -274,6 +332,15 @@ app.get("/download", async (req, res) => {
 
     console.log(`Download запрос: ${url} (format: ${format})`);
 
+    // 👇 VK — обрабатываем через отдельную функцию
+    if (url.includes("vk.com/video") || url.includes("vkvideo.ru/video")) {
+        const start = parseInt(req.query.start, 10) || 0;
+        const normalizedUrl = url
+            .replace("vk.com/video", "vkvideo.ru/video")
+            .replace("m.vk.com/video", "vkvideo.ru/video");
+        return downloadWithYtDlpVk(normalizedUrl, res, format, start);
+    }
+
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
         return downloadWithYtDlp(url, res, format);
     }
@@ -282,7 +349,6 @@ app.get("/download", async (req, res) => {
         return downloadWithYtDlp(url, res, "mp3");
     }
 
-    // TikTok MP4 — через ttdl
     try {
         const v = await download(url);
         const videoUrl = v.videoNoWatermark;
@@ -347,7 +413,6 @@ async function downloadWithYtDlp(url, res, format = "mp4") {
         `yt_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
     );
 
-    // Получаем название
     const title = await getYtDlpTitle(url);
     const safeTitle = sanitizeFileName(title || "video");
     const fileName = `${safeTitle}.${ext}`;
@@ -508,7 +573,6 @@ app.get("/api-youtube", async (req, res) => {
 
             try {
                 const j = JSON.parse(trimmed);
-                // Fallback для thumbnail YouTube
                 const cover = j.thumbnail
                     || `https://i.ytimg.com/vi/${j.id}/hqdefault.jpg`;
 
@@ -532,6 +596,150 @@ app.get("/api-youtube", async (req, res) => {
 });
 
 // ============================================
+// /download-vk — скачивание видео из VK
+// Параметры: url, format=mp4|mp3, start=секунда
+// ============================================
+app.get("/download-vk", async (req, res) => {
+    const url = req.query.url;
+    const format = (req.query.format || "mp4").toLowerCase();
+    const start = parseInt(req.query.start, 10) || 0;
+
+    if (!url) return res.status(400).send("no url");
+
+    const normalizedUrl = url
+        .replace("vk.com/video", "vkvideo.ru/video")
+        .replace("m.vk.com/video", "vkvideo.ru/video");
+
+    console.log(`Download VK: ${normalizedUrl} (format: ${format}, start: ${start})`);
+
+    return downloadWithYtDlpVk(normalizedUrl, res, format, start);
+});
+
+// ============================================
+// Скачивание VK через yt-dlp с обрезкой
+// ============================================
+async function downloadWithYtDlpVk(url, res, format = "mp4", start = 0) {
+    const ext = format === "mp3" ? "mp3" : "mp4";
+    const tmpFile = path.join(
+        os.tmpdir(),
+        `vk_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+    );
+
+    const title = await getYtDlpTitle(url);
+    const safeTitle = sanitizeFileName(title || "vk_video");
+    const fileName = `${safeTitle}.${ext}`;
+
+    const args = [
+        url,
+        "-o", tmpFile,
+        "--no-warnings",
+        "--no-playlist",
+        "--downloader", "ffmpeg",
+        "--downloader-args", "ffmpeg_i:-tls_verify 0 -loglevel error",
+    ];
+
+    if (format === "mp3") {
+        args.push(
+            "-x",
+            "--audio-format", "mp3",
+            "--audio-quality", "0"
+        );
+    } else {
+        args.push(
+            "-f", "best[ext=mp4]/best",
+            "--merge-output-format", "mp4"
+        );
+    }
+
+    if (start > 0) {
+        args.push("--download-sections", `*${start}-inf`);
+    }
+
+    console.log(`yt-dlp VK → ${tmpFile} (format: ${format}, start: ${start}, title: ${safeTitle})`);
+
+    const proc = execFile(YT_DLP_PATH, args, {
+        maxBuffer: 1024 * 1024 * 1024,
+    });
+
+    let stderrData = "";
+
+    proc.stderr.on("data", (d) => {
+        stderrData += d.toString();
+        console.error("yt-dlp VK:", d.toString().trim());
+    });
+
+    proc.on("error", (e) => {
+        console.error("yt-dlp VK spawn error:", e.message);
+        cleanup();
+        if (!res.headersSent) {
+            res.status(500).json({ error: "yt-dlp не запущен: " + e.message });
+        }
+    });
+
+    proc.on("close", (code) => {
+        console.log("yt-dlp VK завершён с кодом:", code);
+
+        if (code !== 0 || !fs.existsSync(tmpFile)) {
+            console.error("yt-dlp VK stderr:", stderrData);
+            cleanup();
+            if (!res.headersSent) {
+                res.status(500).json({
+                    error: "yt-dlp не смог скачать VK: " + stderrData.substring(0, 300)
+                });
+            }
+            return;
+        }
+
+        const stat = fs.statSync(tmpFile);
+
+        if (stat.size === 0) {
+            cleanup();
+            if (!res.headersSent) {
+                res.status(500).json({ error: "yt-dlp вернул пустой файл" });
+            }
+            return;
+        }
+
+        console.log("Размер VK файла:", stat.size, "байт");
+
+        const mime = format === "mp3" ? "audio/mpeg" : "video/mp4";
+        const fallbackName = format === "mp3" ? "audio.mp3" : "video.mp4";
+
+        res.setHeader("Content-Type", mime);
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+        );
+        res.setHeader("Content-Length", stat.size);
+
+        const stream = fs.createReadStream(tmpFile);
+        stream.pipe(res);
+
+        stream.on("close", () => cleanup());
+        stream.on("error", (e) => {
+            console.error("VK stream error:", e.message);
+            cleanup();
+            if (!res.writableEnded) res.end();
+        });
+    });
+
+    function cleanup() {
+        try {
+            if (fs.existsSync(tmpFile)) {
+                fs.unlinkSync(tmpFile);
+                console.log("Удалён временный VK файл:", tmpFile);
+            }
+        } catch (e) {
+            console.error("VK cleanup error:", e.message);
+        }
+    }
+
+    res.on("close", () => {
+        if (!proc.killed) proc.kill();
+    });
+}
+
+// ============================================
 // Старт
 // ============================================
 app.listen(PORT, "0.0.0.0", () => {
@@ -541,5 +749,6 @@ app.listen(PORT, "0.0.0.0", () => {
     console.log(`Поиск YouTube: http://localhost:${PORT}/search?q=бультерьер&platform=youtube`);
     console.log(`Скачать MP4:   http://localhost:${PORT}/download?url=...&format=mp4`);
     console.log(`Скачать MP3:   http://localhost:${PORT}/download?url=...&format=mp3`);
+    console.log(`Скачать VK:    http://localhost:${PORT}/download-vk?url=...&format=mp4&start=60`);
     console.log(`yt-dlp: ${YT_DLP_PATH}`);
 });

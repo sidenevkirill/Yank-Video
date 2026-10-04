@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TikTok / YouTube Downloader</title>
+<title>TikTok / YouTube / VK Downloader</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -26,7 +26,7 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     min-height: 100vh;
     display: flex;
-    align-items: center; 
+    align-items: center;
     justify-content: center;
     padding: 24px;
     background: var(--bg);
@@ -390,6 +390,7 @@
 
   .badge.tiktok { background: #000; }
   .badge.youtube { background: #ef4444; }
+  .badge.vk { background: #0077ff; }
 
   .footer {
     text-align: center;
@@ -420,7 +421,7 @@
       <div class="logo">
         <img src="logo.png" alt="Logo">
       </div>
-      <h1>Скачать с TikTok / YouTube</h1>
+      <h1>Скачать с TikTok / YouTube / VK</h1>
       <p class="subtitle">Платформа для скачивания видео и аудио</p>
     </div>
 
@@ -534,8 +535,13 @@
       return str.includes("tiktok.com");
     }
 
+    // 👇 Новая функция: определяем VK-ссылки
+    function isVkUrl(str) {
+      return str.includes("vk.com/video") || str.includes("vkvideo.ru/video");
+    }
+
     function isUrl(str) {
-      return isYouTubeUrl(str) || isTikTokUrl(str);
+      return isYouTubeUrl(str) || isTikTokUrl(str) || isVkUrl(str);
     }
 
     function resetProgress() {
@@ -652,8 +658,15 @@
       fetchBtn.disabled = true;
       setStatus("Получаю информацию...", "loading", true);
 
-      // 👇 Автоматически определяем платформу по URL
-      const endpoint = isYouTubeUrl(url) ? "/api-youtube" : "/api";
+      // 👇 Для VK используем /api (он теперь умеет VK), для YouTube — /api-youtube
+      let endpoint;
+      if (isVkUrl(url)) {
+        endpoint = "/api";
+      } else if (isYouTubeUrl(url)) {
+        endpoint = "/api-youtube";
+      } else {
+        endpoint = "/api";
+      }
 
       try {
         const res = await fetch(endpoint + "?url=" + encodeURIComponent(url));
@@ -690,7 +703,6 @@
       setStatus("Ищу видео...", "loading", true);
 
       try {
-        // 👇 Ищем сразу по обеим платформам (platform=all)
         const res = await fetch(
           "/search?q=" + encodeURIComponent(query) + "&platform=all"
         );
@@ -721,8 +733,15 @@
         div.className = "result-item";
 
         const platform = item.platform || "tiktok";
-        const badgeClass = platform === "youtube" ? "youtube" : "tiktok";
-        const badgeText = platform === "youtube" ? "YouTube" : "TikTok";
+        let badgeClass = "tiktok";
+        let badgeText = "TikTok";
+        if (platform === "youtube") {
+          badgeClass = "youtube";
+          badgeText = "YouTube";
+        } else if (platform === "vk") {
+          badgeClass = "vk";
+          badgeText = "VK";
+        }
 
         div.innerHTML = `
           <img class="result-thumb" src="${item.thumbnail || ''}" alt="" onerror="this.style.display='none'">
