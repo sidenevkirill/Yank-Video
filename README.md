@@ -1,4 +1,4 @@
-# TikTok / YouTube Downloader
+# TikTok / YouTube Downloader / VK
 
 Веб-приложение и Android-клиент для скачивания видео и аудио из TikTok и YouTube. Работает через локальный Node.js-сервер, который использует `ttdl` (для TikTok) и `yt-dlp` (для YouTube).
 
