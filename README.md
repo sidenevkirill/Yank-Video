@@ -1,6 +1,8 @@
-# TikTok / YouTube Downloader / VK
+# TikTok / YouTube / VK Downloader
 
-Веб-приложение и Android-клиент для скачивания видео и аудио из TikTok и YouTube. Работает через локальный Node.js-сервер, который использует `ttdl` (для TikTok) и `yt-dlp` (для YouTube).
+Веб-приложение и Android-клиент для скачивания видео и аудио из **TikTok**, **YouTube** и **VK Видео**. Работает через локальный Node.js-сервер, который использует `ttdl` (для TikTok) и `yt-dlp` (для YouTube и VK).
+
+![Превью](https://raw.githubusercontent.com/sidenevkirill/Sidenevkirill.github.io/refs/heads/master/img/save.png)
 
 ---
 
@@ -22,6 +24,7 @@
 
 - **Скачивание TikTok** без водяного знака (через `ttdl`)
 - **Скачивание YouTube** в MP4 (H.264) или MP3 (через `yt-dlp` + `ffmpeg`)
+- **Скачивание VK Видео** в MP4 или MP3, с обрезкой по секундам (через `yt-dlp` + `ffmpeg`)
 - **Поиск** по TikTok и YouTube прямо из веб-интерфейса
 - **Превью** — обложка, автор, название до скачивания
 - **Прогресс скачивания** в реальном времени (SSE)
@@ -33,11 +36,13 @@
 ---
 
 ## 📁 Структура проекта
+
 tiktok-server/
 ├── server.js # Node.js-сервер
 ├── package.json
 ├── yt-dlp.exe # yt-dlp для Windows
-├── ffmpeg.exe # ffmpeg для Windows (нужен для MP3 и H.264)
+├── ffmpeg.exe # ffmpeg для Windows (нужен для MP3, H.264, VK)
+├── cert.pem # (опционально) сертификаты для VK
 ├── public/
 │ ├── index.html # Веб-интерфейс
 │ └── logo.png # Логотип
