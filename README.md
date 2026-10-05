@@ -1,4 +1,4 @@
-# TikTok / YouTube / VK Downloader
+# Yank-Video
 
 Веб-приложение и Android-клиент для скачивания видео и аудио из **TikTok**, **YouTube** и **VK Видео**. Работает через локальный Node.js-сервер, который использует `ttdl` (для TikTok) и `yt-dlp` (для YouTube и VK).
 
