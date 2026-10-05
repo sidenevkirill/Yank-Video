@@ -257,7 +257,6 @@ Cannot choose from an empty sequence (yt-dlp-proxy)	Бесплатные про�
 403 Forbidden от YouTube	YouTube требует cookies — используй --cookies-from-browser
 Медленное скачивание	Проверь интернет или используй прокси
 Error 1033 (Cloudflare)	Провайдер режет туннель — переключись на Pinggy
+
 📄 Лицензия
 MIT. Используй как хочешь. Автор не несёт ответственности за нарушение авторских прав третьих лиц.
-
-text
