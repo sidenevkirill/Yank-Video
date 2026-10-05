@@ -5,8 +5,9 @@ node_modules/
 *.tmp
 proxy.json
 readme.txt
-vk-music.js
+/vk-music.js
 config.json
 downloads/
 *.mp3
 *.mp4
+*.ts
