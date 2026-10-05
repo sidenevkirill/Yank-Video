@@ -52,6 +52,9 @@ text
 
 ---
 
+## Интерактивный режим
+node cli.js
+
 ## 🖥️ Установка (Windows)
 
 ### 1. Установи Node.js
@@ -258,42 +261,3 @@ Error 1033 (Cloudflare)	Провайдер режет туннель — пер�
 MIT. Используй как хочешь. Автор не несёт ответственности за нарушение авторских прав третьих лиц.
 
 text
-
-Консольная версия загрузчика — всё управляется командами в терминале, без веб-интерфейса.
-
-
-```cmd
-
-:: TikTok видео
-node cli.js tiktok https://www.tiktok.com/@user/video/1234567890
-
-:: YouTube видео
-node cli.js youtube https://www.youtube.com/watch?v=xACmY7I3IGw
-
-:: YouTube в MP3
-node cli.js youtube https://youtu.be/xACmY7I3IGw --mp3
-
-:: VK видео целиком
-node cli.js vk https://vk.com/video-22822305_456239018
-
-:: VK с 60-й секунды
-node cli.js vk https://vk.com/video-22822305_456239018 --start=60
-
-:: VK только звук
-node cli.js vk https://vk.com/video-22822305_456239018 --mp3
-
-:: Поиск на YouTube
-node cli.js search "бультерьер" --platform=youtube
-
-:: Поиск в TikTok
-node cli.js search "котики" --platform=tiktok
-
-:: Поиск везде
-node cli.js search "музыка" --platform=all
-
-:: Инфо о YouTube-видео
-node cli.js info https://youtu.be/xACmY7I3IGw
-
-:: Инфо о VK-видео
-node cli.js info https://vk.com/video-22822305_456239018
----
