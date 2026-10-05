@@ -20,7 +20,7 @@ app.get("/api", async (req, res) => {
 
     console.log("API запрос:", url);
 
-    // 👇 Если это VK — обрабатываем через yt-dlp, а не через ttdl
+    // Если это VK — обрабатываем через yt-dlp, а не через ttdl
     if (url.includes("vk.com/video") || url.includes("vkvideo.ru/video")) {
         console.log("VK-ссылка в /api, получаю инфо через yt-dlp...");
         const vkInfo = await getVkVideoInfo(url);
@@ -84,7 +84,7 @@ app.get("/search", async (req, res) => {
 
     console.log(`Search запрос: "${query}" (platform: ${platform})`);
 
-    // 👇 Если это прямая ссылка на VK-видео — возвращаем инфо о нём
+    // Если это прямая ссылка на VK-видео — возвращаем инфо о нём
     if (query.includes("vk.com/video") || query.includes("vkvideo.ru/video")) {
         console.log("Распознана VK-ссылка, получаю инфо...");
         const vkInfo = await getVkVideoInfo(query);
