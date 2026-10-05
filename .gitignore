@@ -1,0 +1,7 @@
+node_modules/
+*.exe
+.env
+*.log
+*.tmp
+proxy.json
+readme.txt
