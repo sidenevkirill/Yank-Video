@@ -10,6 +10,17 @@ const app = express();
 const PORT = 3000;
 const YT_DLP_PATH = path.join(__dirname, "yt-dlp.exe");
 
+// 👇 Путь к файлу с cookies для YouTube (если есть)
+const YT_COOKIES_PATH = path.join(__dirname, "youtube-cookies.txt");
+
+// Проверяем, существует ли файл с cookies
+function getYoutubeCookiesArgs() {
+    if (fs.existsSync(YT_COOKIES_PATH)) {
+        return ["--cookies", YT_COOKIES_PATH];
+    }
+    return [];
+}
+
 app.use(express.static(path.join(__dirname, "public")));
 
 // ============================================
@@ -21,7 +32,6 @@ app.get("/api", async (req, res) => {
 
     console.log("API запрос:", url);
 
-    // 👇 Если это VK — обрабатываем через yt-dlp, а не через ttdl
     if (url.includes("vk.com/video") || url.includes("vkvideo.ru/video")) {
         console.log("VK-ссылка в /api, получаю инфо через yt-dlp...");
         const vkInfo = await getVkVideoInfo(url);
@@ -111,7 +121,6 @@ app.get("/search", async (req, res) => {
 
     console.log(`Search запрос: "${query}" (platform: ${platform})`);
 
-    // 👇 Если это прямая ссылка на VK-видео — возвращаем инфо о нём
     if (query.includes("vk.com/video") || query.includes("vkvideo.ru/video")) {
         console.log("Распознана VK-ссылка, получаю инфо...");
         const vkInfo = await getVkVideoInfo(query);
@@ -181,7 +190,7 @@ function getVkVideoInfo(url) {
 }
 
 // ============================================
-// Поиск TikTok (через ytsearch, фильтр tiktok.com)
+// Поиск TikTok
 // ============================================
 async function searchTikTok(query) {
     const results = await searchWithYtDlp(`ytsearch15:${query} tiktok`, "tiktok");
@@ -252,7 +261,7 @@ async function searchYoutube(query) {
 }
 
 // ============================================
-// Общий поиск через yt-dlp
+// Общий поиск через yt-dlp (с cookies для YouTube)
 // ============================================
 function searchWithYtDlp(searchQuery, platform) {
     return new Promise((resolve, reject) => {
@@ -263,6 +272,11 @@ function searchWithYtDlp(searchQuery, platform) {
             "--no-warnings",
             "--skip-download",
         ];
+
+        // 👇 Добавляем cookies для YouTube
+        if (platform === "youtube" || searchQuery.includes("youtube")) {
+            args.push(...getYoutubeCookiesArgs());
+        }
 
         execFile(YT_DLP_PATH, args, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
             if (err) {
@@ -349,7 +363,7 @@ function sanitizeFileName(name) {
 }
 
 // ============================================
-// /download — TikTok (ttdl), YouTube, VK (yt-dlp), VK Music
+// /download — TikTok, YouTube, VK, VK Music
 // ============================================
 app.get("/download", async (req, res) => {
     const url = req.query.url;
@@ -359,14 +373,12 @@ app.get("/download", async (req, res) => {
 
     console.log(`Download запрос: ${url} (format: ${format})`);
 
-    // 👇 VK Music — трек по ссылке
     if (url.includes("vk.ru/audio") || url.includes("vk.com/audio")
         || url.includes("vk.ru/music") || url.includes("vk.com/music")) {
         console.log("VK Music ссылка, скачиваю трек...");
         return downloadVkMusicInline(url, res);
     }
 
-    // 👇 VK видео — обрабатываем через отдельную функцию
     if (url.includes("vk.com/video") || url.includes("vkvideo.ru/video")) {
         const start = parseInt(req.query.start, 10) || 0;
         const normalizedUrl = url
@@ -417,7 +429,7 @@ app.get("/download", async (req, res) => {
 });
 
 // ============================================
-// Скачивание VK Music inline (из /download)
+// Скачивание VK Music inline
 // ============================================
 async function downloadVkMusicInline(url, res) {
     try {
@@ -445,17 +457,24 @@ async function downloadVkMusicInline(url, res) {
 }
 
 // ============================================
-// Получить title через yt-dlp
+// Получить title через yt-dlp (с cookies)
 // ============================================
 function getYtDlpTitle(url) {
     return new Promise((resolve) => {
-        execFile(YT_DLP_PATH, [
+        const args = [
             url,
             "--dump-json",
             "--no-warnings",
             "--skip-download",
             "--no-playlist",
-        ], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+        ];
+
+        // 👇 Добавляем cookies для YouTube
+        if (url.includes("youtube.com") || url.includes("youtu.be")) {
+            args.push(...getYoutubeCookiesArgs());
+        }
+
+        execFile(YT_DLP_PATH, args, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
             if (err) return resolve(null);
             try {
                 const j = JSON.parse(stdout.trim());
@@ -499,6 +518,11 @@ async function downloadWithYtDlp(url, res, format = "mp4") {
             "--no-warnings",
             "--no-playlist",
         ];
+    }
+
+    // 👇 Добавляем cookies для YouTube
+    if (url.includes("youtube.com") || url.includes("youtu.be")) {
+        args.push(...getYoutubeCookiesArgs());
     }
 
     console.log(`yt-dlp → ${tmpFile} (format: ${format}, title: ${safeTitle})`);
@@ -589,7 +613,7 @@ async function downloadWithYtDlp(url, res, format = "mp4") {
 }
 
 // ============================================
-// /api-youtube — инфо о YouTube-видео
+// /api-youtube — инфо о YouTube-видео (с cookies)
 // ============================================
 app.get("/api-youtube", async (req, res) => {
     const url = req.query.url;
@@ -614,6 +638,7 @@ app.get("/api-youtube", async (req, res) => {
             "--no-warnings",
             "--skip-download",
             "--no-playlist",
+            ...getYoutubeCookiesArgs(), // 👈 cookies
         ];
 
         execFile(YT_DLP_PATH, args, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
@@ -659,7 +684,6 @@ app.get("/api-youtube", async (req, res) => {
 
 // ============================================
 // /download-vk — скачивание видео из VK
-// Параметры: url, format=mp4|mp3, start=секунда
 // ============================================
 app.get("/download-vk", async (req, res) => {
     const url = req.query.url;
@@ -853,4 +877,5 @@ app.listen(PORT, "0.0.0.0", () => {
     console.log(`Скачать VK:    http://localhost:${PORT}/download-vk?url=...&format=mp4&start=60`);
     console.log(`Скачать VK Music: http://localhost:${PORT}/download-vk-music?url=...`);
     console.log(`yt-dlp: ${YT_DLP_PATH}`);
+    console.log(`YouTube cookies: ${fs.existsSync(YT_COOKIES_PATH) ? "✓ найдены" : "✗ не найдены (YouTube может требовать авторизацию)"}`);
 });
