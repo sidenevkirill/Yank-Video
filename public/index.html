@@ -352,7 +352,6 @@
   }
 
   .badge.tiktok { background: #000; }
-  .badge.youtube { background: #ef4444; }
   .badge.vk { background: #0077ff; }
   .badge.vk-music { background: #0077ff; }
 
@@ -386,7 +385,7 @@
         <img src="logo.png" alt="Logo">
       </div>
       <h1>Yank Video</h1>
-     <p class="subtitle">Скачивай видео и музыку с TikTok, YouTube, VK</p>
+      <p class="subtitle">Скачивай видео и музыку с TikTok, VK</p>
     </div>
 
     <div class="card">
@@ -491,10 +490,6 @@
       status.innerHTML = "";
     }
 
-    function isYouTubeUrl(str) {
-      return str.includes("youtube.com") || str.includes("youtu.be");
-    }
-
     function isTikTokUrl(str) {
       return str.includes("tiktok.com");
     }
@@ -510,7 +505,7 @@
     }
 
     function isUrl(str) {
-      return isYouTubeUrl(str) || isTikTokUrl(str) || isVkUrl(str) || isVkMusicUrl(str);
+      return isTikTokUrl(str) || isVkUrl(str) || isVkMusicUrl(str);
     }
 
     function resetProgress() {
@@ -632,8 +627,6 @@
         endpoint = "/api-vk-music";
       } else if (isVkUrl(url)) {
         endpoint = "/api";
-      } else if (isYouTubeUrl(url)) {
-        endpoint = "/api-youtube";
       } else {
         endpoint = "/api";
       }
@@ -705,10 +698,7 @@
         const platform = item.platform || "tiktok";
         let badgeClass = "tiktok";
         let badgeText = "TikTok";
-        if (platform === "youtube") {
-          badgeClass = "youtube";
-          badgeText = "YouTube";
-        } else if (platform === "vk") {
+        if (platform === "vk") {
           badgeClass = "vk";
           badgeText = "VK";
         } else if (platform === "vk-music") {
