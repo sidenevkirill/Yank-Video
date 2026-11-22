@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 /**
- * CLI для скачивания видео из TikTok, YouTube и VK
+ * CLI для скачивания видео из TikTok, YouTube и VK, а также треков VK
  * Режимы:
  *   node cli.js              → интерактивное меню
  *   node cli.js tiktok <url> → прямая команда
  *   node cli.js --help       → справка
+ *
+ * Разработчик: Сиденев Кирилл
  */
 
 const path = require("path");
@@ -14,9 +16,14 @@ const os = require("os");
 const readline = require("readline");
 const { execFile, spawn } = require("child_process");
 const { download } = require("@silent-tech-offc/ttdl");
+const axios = require("axios");
 
 const YT_DLP_PATH = path.join(__dirname, "yt-dlp.exe");
 const OUTPUT_DIR = path.join(__dirname, "downloads");
+
+// Токен с правами audio
+const VK_AUDIO_TOKEN = "";
+const VK_USER_AGENT = "VKAndroidApp/5.23-2978 (Android 4.4.2; SDK 19; x86)";
 
 // ============================================
 // Утилиты
@@ -39,6 +46,10 @@ function sanitizeFileName(name) {
 
 function isVk(url) {
     return url.includes("vk.com/video") || url.includes("vkvideo.ru/video");
+}
+function isVkAudio(url) {
+    return url.includes("vk.com/audio") || url.includes("vk.com/music")
+        || url.includes("vk.ru/audio") || url.includes("vk.ru/music");
 }
 function isYouTube(url) {
     return url.includes("youtube.com") || url.includes("youtu.be");
@@ -103,7 +114,59 @@ async function downloadTikTok(url, isAudio) {
 }
 
 // ============================================
-// Скачивание через yt-dlp (YouTube / VK)
+// Скачивание трека VK
+// ============================================
+async function downloadVkTrack(url) {
+    const match = url.match(/audio(-?\d+)_(\d+)/);
+    if (!match) throw new Error("Не удалось распарсить ссылку на трек (нужен формат .../audio-123_456)");
+    const ownerId = match[1];
+    const audioId = match[2];
+
+    if (!VK_AUDIO_TOKEN || VK_AUDIO_TOKEN.includes("ВАШ_ТОКЕН")) {
+        throw new Error("Укажи VK_AUDIO_TOKEN в начале cli.js (нужен токен с правами audio)");
+    }
+
+    console.log("[VK Music] Получаю информацию о треке...");
+
+    const apiUrl = `https://api.vk.com/method/audio.getById?audios=${ownerId}_${audioId}&access_token=${VK_AUDIO_TOKEN}&v=5.131`;
+    const res = await axios.get(apiUrl, { headers: { "User-Agent": VK_USER_AGENT } });
+
+    if (res.data.error) {
+        throw new Error(`VK API: ${res.data.error.error_msg} (код ${res.data.error.error_code})`);
+    }
+
+    const track = res.data.response[0];
+    if (!track) throw new Error("VK не вернул данные трека");
+    if (!track.url) throw new Error("VK не вернул ссылку на MP3 (трек недоступен или скрыт)");
+
+    if (track.url.includes(".m3u8")) {
+        throw new Error("VK вернул m3u8-поток вместо MP3. Прямое скачивание невозможно, нужен ffmpeg/HLS.");
+    }
+
+    console.log(`[VK Music] Скачиваю: ${track.artist} - ${track.title}`);
+
+    const response = await axios.get(track.url, {
+        responseType: "stream",
+        headers: { "User-Agent": VK_USER_AGENT },
+    });
+
+    ensureOutputDir();
+    const safeName = sanitizeFileName(`${track.artist} - ${track.title}`);
+    const outPath = path.join(OUTPUT_DIR, safeName + ".mp3");
+
+    return new Promise((resolve, reject) => {
+        const writer = fs.createWriteStream(outPath);
+        response.data.pipe(writer);
+        writer.on("finish", () => {
+            console.log(`✓ Сохранено: ${outPath}`);
+            resolve();
+        });
+        writer.on("error", reject);
+    });
+}
+
+// ============================================
+// Скачивание через yt-dlp (YouTube / VK видео)
 // ============================================
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {
@@ -226,6 +289,7 @@ function printHelp() {
     console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║  TikTok / YouTube / VK Downloader CLI                    ║
+║  Разработчик: Сиденев Кирилл                            ║
 ╚══════════════════════════════════════════════════════════╝
 
 Использование:
@@ -236,12 +300,13 @@ function printHelp() {
   tiktok <url>              Скачать видео из TikTok
   youtube <url>             Скачать видео из YouTube
   vk <url>                  Скачать видео из VK
+  vk-audio <url>            Скачать трек из VK (нужен VK_AUDIO_TOKEN)
   search <запрос>           Найти видео
   info <url>                Показать инфо о видео
 
 Флаги:
   --mp3                     Скачать только аудио (MP3)
-  --start=<секунда>         Начать скачивание с указанной секунды (только VK)
+  --start=<секунда>         Начать скачивание с указанной секунды (только VK видео)
   --platform=youtube|tiktok|all   Платформа для поиска (по умолчанию all)
   --help                    Показать справку
 
@@ -249,10 +314,26 @@ function printHelp() {
   node cli.js tiktok https://www.tiktok.com/@user/video/123
   node cli.js youtube https://youtu.be/xxx --mp3
   node cli.js vk https://vk.com/video-22822305_456239018 --start=60
+  node cli.js vk-audio https://vk.com/audio-2001234567_1234567
   node cli.js search "бультерьер" --platform=youtube
   node cli.js info https://youtu.be/xxx
 
 Файлы сохраняются в: ${OUTPUT_DIR}
+`);
+}
+
+// ============================================
+// О разработчике
+// ============================================
+function printAbout() {
+    console.log(`
+╔════════════════════════════════════════════╗
+║              О ПРОГРАММЕ                ║
+╠════════════════════════════════════════════╣
+║  Разработчик: Сиденёв Кирилл               ║
+║  Проект:      TikTok / YouTube / VK        ║
+║               Downloader CLI               ║
+╚════════════════════════════════════════════╝
 `);
 }
 
@@ -264,13 +345,16 @@ async function interactiveMenu() {
         console.log(`
 ╔════════════════════════════════════════════╗
 ║   TikTok / YouTube / VK Downloader         ║
+║   Разработчик: Сиденев Кирилл              ║
 ╠════════════════════════════════════════════╣
 ║  1. Скачать с TikTok                       ║
 ║  2. Скачать с YouTube                      ║
-║  3. Скачать из VK                          ║
+║  3. Скачать видео из VK                    ║
 ║  4. Скачать только аудио (MP3)             ║
 ║  5. Поиск видео                            ║
 ║  6. Инфо о видео                           ║
+║  7. Скачать трек из VK                     ║
+║  8. О программе                         ║
 ║  0. Выход                                  ║
 ╚════════════════════════════════════════════╝
 `);
@@ -296,7 +380,7 @@ async function interactiveMenu() {
                 case "3": {
                     const url = (await ask("Вставь ссылку VK: ")).trim();
                     if (!url) { console.log("✗ Пустая ссылка"); break; }
-                    if (!isVk(url)) { console.log("✗ Это не VK-ссылка"); break; }
+                    if (!isVk(url)) { console.log("✗ Это не VK-ссылка на видео"); break; }
                     await downloadWithYtDlp(normalizeVkUrl(url), false, 0);
                     break;
                 }
@@ -356,6 +440,16 @@ async function interactiveMenu() {
                     console.log("─────────────────────────────────────");
                     break;
                 }
+                case "7": {
+                    const url = (await ask("Вставь ссылку на трек VK: ")).trim();
+                    if (!url) { console.log("✗ Пустая ссылка"); break; }
+                    if (!isVkAudio(url)) { console.log("✗ Это не ссылка на трек VK"); break; }
+                    await downloadVkTrack(url);
+                    break;
+                }
+                case "8":
+                    printAbout();
+                    break;
                 case "0":
                     console.log("Пока!");
                     rl.close();
@@ -413,6 +507,11 @@ async function main() {
         process.exit(0);
     }
 
+    if (args.command === "about") {
+        printAbout();
+        process.exit(0);
+    }
+
     const isAudio = !!args.flags.mp3;
     const start = parseInt(args.flags.start, 10) || 0;
 
@@ -432,8 +531,14 @@ async function main() {
 
             case "vk":
                 if (!args.url) throw new Error("Укажи URL");
-                if (!isVk(args.url)) throw new Error("Это не VK-ссылка");
+                if (!isVk(args.url)) throw new Error("Это не VK-ссылка на видео");
                 await downloadWithYtDlp(normalizeVkUrl(args.url), isAudio, start);
+                break;
+
+            case "vk-audio":
+                if (!args.url) throw new Error("Укажи URL");
+                if (!isVkAudio(args.url)) throw new Error("Это не ссылка на трек VK");
+                await downloadVkTrack(args.url);
                 break;
 
             case "search": {
